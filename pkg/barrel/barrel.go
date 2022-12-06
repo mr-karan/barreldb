@@ -38,7 +38,6 @@ type Opts struct {
 
 // Init initialises a datastore for storing data.
 func Init(opts Opts) (*Barrel, error) {
-	// Initialise logger.
 
 	// TODO: Check for stale files and create an index automatically.
 	var (
@@ -81,9 +80,9 @@ func Init(opts Opts) (*Barrel, error) {
 		// TODO: Add a sane default later.
 		opts.MergeInterval = time.Second * 5
 	}
-	go barrel.MergeFiles(opts.MergeInterval)
-	// Spawn a goroutine which checks for the file size of the active file at periodic interval.
-	go barrel.ExamineFileSize(time.Minute * 1)
+	// go barrel.MergeFiles(opts.MergeInterval)
+	// // Spawn a goroutine which checks for the file size of the active file at periodic interval.
+	// go barrel.ExamineFileSize(time.Minute * 1)
 
 	return barrel, nil
 }
