@@ -1,53 +1,55 @@
 package barrel
 
 import (
-	"bytes"
 	"fmt"
+	"log"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/mr-karan/barreldb/internal/datafile"
 )
 
 const (
-	ACTIVE_DATAFILE = "barrel.db"
-	LOCKFILE        = "barrel.lock"
+	LOCKFILE = "barrel.lock"
 )
 
 type Barrel struct {
 	sync.Mutex
 
-	opts   Opts
-	store  *Store
-	keydir KeyDir
+	lo   *log.Logger
+	opts Opts // Options for managing datafile.
+
+	keydir KeyDir                     // In-memory hashmap of all active keys.
+	df     *datafile.DataFile         // Active datafile.
+	stale  map[int]*datafile.DataFile // Map of older datafiles with their IDs.
+
+	flockF *os.File //Lockfile to prevent multiple write access to same datafile.
 }
 
 // Opts represents configuration options for managing a datastore.
 type Opts struct {
-	ReadOnly    bool // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
-	MaxFileSize int  // Max size of active file. On exceeding this size it's rotated.
-	EnableFSync bool // Should flush filesystem buffer after every right.
+	Dir           string        // Path for storing data files.
+	ReadOnly      bool          // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
+	MergeInterval time.Duration // Interval to compact old files.
+	MaxFileSize   int64         // Max size of active file in bytes. On exceeding this size it's rotated.
+	EnableFSync   bool          // Should flush filesystem buffer after every right.
 }
 
 // Init initialises a datastore for storing data.
-func Init(dir string, opts Opts) (*Barrel, error) {
-	// If the file doesn't exist, create it, or append to the file.
-	activeFPath := filepath.Join(dir, ACTIVE_DATAFILE)
-	activeF, err := os.OpenFile(activeFPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, fmt.Errorf("error opening file handler: %v", err)
-	}
+func Init(opts Opts) (*Barrel, error) {
+	// Initialise logger.
 
-	// Use stat to get file syze in bytes.
-	stat, err := activeF.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("error fetching file stats: %v", err)
-	}
+	// TODO: Check for stale files and create an index automatically.
+	var (
+		lo    = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lshortfile)
+		index = 0
+	)
 
-	// Create a reader for reading the db file.
-	reader, err := os.Open(activeFPath)
+	// Initialise a db store.
+	df, err := datafile.New(opts.Dir, index)
 	if err != nil {
-		return nil, fmt.Errorf("error openning mmap for db: %v", err)
+		return nil, err
 	}
 
 	var flockF *os.File
@@ -57,28 +59,31 @@ func Init(dir string, opts Opts) (*Barrel, error) {
 		if Exists(LOCKFILE) {
 			return nil, fmt.Errorf("a lockfile already exists inside dir")
 		} else {
-			flockF, err = CreateFlockFile(LOCKFILE)
+			flockF, err = createFlockFile(LOCKFILE)
 			if err != nil {
 				return nil, fmt.Errorf("error creating lockfile: %w", err)
 			}
 		}
 	}
 
-	// Create a datastore.
-	store := &Store{
-		ActiveFile: activeF,
-		Reader:     reader,
-		StaleFiles: make([]*os.File, 0),
-		Offset:     int(stat.Size()),
-		flockF:     flockF,
-	}
-
 	// Initialise barrel.
 	barrel := &Barrel{
 		opts:   opts,
-		store:  store,
+		lo:     lo,
+		df:     df,
+		stale:  make(map[int]*datafile.DataFile, 0),
+		flockF: flockF,
 		keydir: make(KeyDir, 0),
 	}
+
+	// Spawn a goroutine which runs in background and compacts all datafiles in a new single datafile.
+	if opts.MergeInterval == time.Second*0 {
+		// TODO: Add a sane default later.
+		opts.MergeInterval = time.Second * 5
+	}
+	go barrel.MergeFiles(opts.MergeInterval)
+	// Spawn a goroutine which checks for the file size of the active file at periodic interval.
+	go barrel.ExamineFileSize(time.Minute * 1)
 
 	return barrel, nil
 }
@@ -88,11 +93,10 @@ func Init(dir string, opts Opts) (*Barrel, error) {
 // removes any file locks on the database directory. Not calling close will prevent
 // future startups until it's removed manually.
 func (b *Barrel) Close() {
-	b.store.ActiveFile.Close()
-	b.store.Reader.Close()
+	b.df.Close()
 
 	if !b.opts.ReadOnly {
-		_ = DestroyFlockFile(b.store.flockF)
+		_ = destroyFlockFile(b.flockF)
 	}
 }
 
@@ -108,56 +112,7 @@ func (b *Barrel) Put(k string, val []byte) error {
 		return fmt.Errorf("put operation now allowed in read-only mode")
 	}
 
-	// Prepare header.
-	header := Header{
-		Timestamp: uint32(time.Now().Unix()),
-		KeySize:   uint32(len(k)),
-		ValSize:   uint32(len(val)),
-	}
-
-	// Prepare the record.
-	record := Record{
-		Key:   k,
-		Value: val,
-	}
-
-	// Create a buffer for writing data to it.
-	// TODO: Create a buffer pool.
-	buf := bytes.NewBuffer([]byte{})
-
-	// Encode header.
-	header.encode(buf)
-
-	// Write key/value.
-	buf.WriteString(k)
-	buf.Write(val)
-
-	// Append to underlying file.
-	if _, err := b.store.ActiveFile.Write(buf.Bytes()); err != nil {
-		return fmt.Errorf("error writing data to file: %v", err)
-	}
-
-	// Add entry to KeyDir.
-	// We just save the value of key and some metadata for faster lookups.
-	// The value is only stored in disk.
-	b.keydir[k] = Meta{
-		Timestamp:  int(record.Header.Timestamp),
-		RecordSize: len(buf.Bytes()),
-		RecordPos:  b.store.Offset + len(buf.Bytes()),
-		FileID:     "TODO",
-	}
-
-	// Increase the offset of the current active file.
-	b.store.Offset += len(buf.Bytes())
-
-	// Ensure filesystem's in memory buffer is flushed to disk.
-	if b.opts.EnableFSync {
-		if err := b.store.ActiveFile.Sync(); err != nil {
-			return fmt.Errorf("error syncing file to disk: %v", err)
-		}
-	}
-
-	return nil
+	return b.put(k, val)
 }
 
 // Get takes a key and finds the metadata in memory.
@@ -167,47 +122,54 @@ func (b *Barrel) Get(k string) ([]byte, error) {
 	b.Lock()
 	defer b.Unlock()
 
-	// Check for entry in KeyDir.
-	meta, ok := b.keydir[k]
-	if !ok {
-		return nil, fmt.Errorf("error finding data for the given key")
+	return b.get(k)
+}
+
+// Delete creates a tombstone record for the given key.
+// Actual deletes happen in background when merge is called.
+// Since the file is opened in append-only mode, the new value of the key
+// is overwritten both on disk and in memory as a tombstone record.
+func (b *Barrel) Delete(k string) error {
+	b.Lock()
+	defer b.Unlock()
+
+	if b.opts.ReadOnly {
+		return fmt.Errorf("delete operation now allowed in read-only mode")
 	}
 
-	var (
-		// Header object for decoding the binary data into it.
-		header Header
-		// Position to read the file from.
-		position = int64(meta.RecordPos - meta.RecordSize)
-	)
-
-	// Initialise a buffer for reading data.
-	record := make([]byte, meta.RecordSize)
-
-	// Read the file with the given offset.
-	n, err := b.store.Reader.ReadAt(record, position)
-	if err != nil {
-		return nil, fmt.Errorf("error reading data from file: %v", err)
-	}
-
-	// Check if the size of bytes read matches the record size.
-	if n != int(meta.RecordSize) {
-		return nil, fmt.Errorf("error fetching record, invalid size")
-	}
-
-	// Decode the header.
-	header.decode(record)
-
-	// Get the offset position in record to start reading the value from.
-	valPos := meta.RecordSize - int(header.ValSize)
-
-	return record[valPos:], nil
+	return b.delete(k)
 }
 
 // List iterates over all keys and returns the list of keys.
 func (b *Barrel) List() []string {
+	b.Lock()
+	defer b.Unlock()
+
 	keys := make([]string, len(b.keydir))
 	for k := range b.keydir {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// Len iterates over all keys and returns the total number of keys.
+func (b *Barrel) Len() int {
+	b.Lock()
+	defer b.Unlock()
+
+	return len(b.keydir)
+}
+
+// Fold iterates over all keys and calls the given function for each key.
+func (b *Barrel) Fold(fn func(k string) error) error {
+	b.Lock()
+	defer b.Unlock()
+
+	// Call fn for each key.
+	for k := range b.keydir {
+		if err := fn(k); err != nil {
+			return err
+		}
+	}
+	return nil
 }

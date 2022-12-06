@@ -1,4 +1,4 @@
-## Implementation Notes
+## TODO
 
 ### Initialising
 
@@ -24,7 +24,7 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 
 - [x] Encode the header
 - [x] Flush to a file
-- [ ] Add TTL
+- [ ] Add Expiry
 - [ ] Add Checksum
 - [x] Organize methods as Encoder/Decoder package
 - [x] Add KeyDir struct
@@ -38,9 +38,11 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 ### Background
 
 - [ ] Merge old files
-- [ ] 
+- [ ] Hints file
+- [ ] GC cleanup of old/expired/deleted keys
 
 ### Starting program
 
-## Test Cases
+- [ ] Load data from hints file for faster boot time
 
+## Test Cases
