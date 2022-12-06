@@ -3,6 +3,7 @@ package barrel
 import (
 	"bytes"
 	"fmt"
+	"hash/crc32"
 	"time"
 )
 
@@ -30,12 +31,21 @@ func (b *Barrel) get(k string) ([]byte, error) {
 	// Get the offset position in record to start reading the value from.
 	valPos := meta.RecordSize - int(header.ValSize)
 
-	return record[valPos:], nil
+	// Read the value from the record.
+	val := record[valPos:]
+
+	// Validate the checksum.
+	if crc32.ChecksumIEEE(val) != header.Checksum {
+		return nil, fmt.Errorf("invalid data: checksum does not match")
+	}
+
+	return val, nil
 }
 
-func (b *Barrel) put(k string, val []byte) error {
+func (b *Barrel) put(k string, val []byte, expiry time.Time) error {
 	// Prepare header.
 	header := Header{
+		Checksum:  crc32.ChecksumIEEE(val),
 		Timestamp: uint32(time.Now().Unix()),
 		KeySize:   uint32(len(k)),
 		ValSize:   uint32(len(val)),
@@ -71,7 +81,7 @@ func (b *Barrel) put(k string, val []byte) error {
 		Timestamp:  int(record.Header.Timestamp),
 		RecordSize: len(buf.Bytes()),
 		RecordPos:  offset + len(buf.Bytes()),
-		FileID:     "TODO",
+		FileID:     b.df.ID(),
 	}
 
 	// Ensure filesystem's in memory buffer is flushed to disk.
