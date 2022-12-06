@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/mr-karan/barreldb/pkg/barrel"
 )
@@ -17,7 +18,7 @@ func main() {
 		panic(err)
 	}
 
-	if err := barrel.Put("hello", []byte("world")); err != nil {
+	if err := barrel.PutEx("hello", []byte("world"), time.Now().Add(time.Hour)); err != nil {
 		panic(err)
 	}
 	if err := barrel.Put("good", []byte("bye")); err != nil {

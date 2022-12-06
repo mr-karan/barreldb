@@ -112,7 +112,19 @@ func (b *Barrel) Put(k string, val []byte) error {
 		return fmt.Errorf("put operation now allowed in read-only mode")
 	}
 
-	return b.put(k, val)
+	return b.put(k, val, nil)
+}
+
+// PutEx is same as Put but also takes an additional expiry time.
+func (b *Barrel) PutEx(k string, val []byte, ex time.Time) error {
+	b.Lock()
+	defer b.Unlock()
+
+	if b.opts.ReadOnly {
+		return fmt.Errorf("put operation now allowed in read-only mode")
+	}
+
+	return b.put(k, val, &ex)
 }
 
 // Get takes a key and finds the metadata in memory.

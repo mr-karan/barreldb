@@ -64,7 +64,7 @@ func (b *Barrel) Merge() error {
 		if err != nil {
 			return err
 		}
-		if err := tmpBarrel.put(k, val); err != nil {
+		if err := tmpBarrel.put(k, val, nil); err != nil {
 			return err
 		}
 	}

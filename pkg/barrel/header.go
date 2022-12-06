@@ -15,9 +15,9 @@ Each entry cannot exceed more than ~8.6GB as a theoretical limit.
 In a practical sense, this is also constrained by the memory of the underlying VM
 where this program would run.
 
-------------------------------------------------------
-| crc(4) | time(4) | key_size(4) | val_size(4) | key | val    |
-------------------------------------------------------
+------------------------------------------------------------------------------
+| crc(4) | time(4) | expiry (4) | key_size(4) | val_size(4) | key | val      |
+------------------------------------------------------------------------------
 */
 type Record struct {
 	Header Header
@@ -29,6 +29,7 @@ type Record struct {
 type Header struct {
 	Checksum  uint32
 	Timestamp uint32
+	Expiry    uint32
 	KeySize   uint32
 	ValSize   uint32
 }

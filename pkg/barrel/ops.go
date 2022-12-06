@@ -42,13 +42,18 @@ func (b *Barrel) get(k string) ([]byte, error) {
 	return val, nil
 }
 
-func (b *Barrel) put(k string, val []byte, expiry time.Time) error {
+func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 	// Prepare header.
 	header := Header{
 		Checksum:  crc32.ChecksumIEEE(val),
 		Timestamp: uint32(time.Now().Unix()),
 		KeySize:   uint32(len(k)),
 		ValSize:   uint32(len(val)),
+	}
+
+	// Check for expiry
+	if expiry != nil {
+		header.Expiry = uint32(expiry.Unix())
 	}
 
 	// Prepare the record.
@@ -96,7 +101,7 @@ func (b *Barrel) put(k string, val []byte, expiry time.Time) error {
 
 func (b *Barrel) delete(k string) error {
 	// Store an empty tombstone value for the given key.
-	if err := b.put(k, []byte{}); err != nil {
+	if err := b.put(k, []byte{}, nil); err != nil {
 		return err
 	}
 
