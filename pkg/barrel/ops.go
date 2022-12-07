@@ -31,8 +31,6 @@ func (b *Barrel) get(k string) (Record, error) {
 		if !ok {
 			return Record{}, fmt.Errorf("error looking up for the db file for the given id: %d", meta.FileID)
 		}
-		reader.Open()
-		defer reader.Close()
 	}
 
 	// Read the file with the given offset.

@@ -40,11 +40,6 @@ func (b *Barrel) rotateDF() error {
 		return nil
 	}
 
-	// Close existing FDs before moving the file.
-	if err := b.df.Close(); err != nil {
-		return err
-	}
-
 	oldID := b.df.ID()
 
 	// Add this datafile to list of stale files.

@@ -107,8 +107,20 @@ func Init(opts Opts) (*Barrel, error) {
 // removes any file locks on the database directory. Not calling close will prevent
 // future startups until it's removed manually.
 func (b *Barrel) Close() {
+	b.Lock()
+	defer b.Unlock()
+
 	// Close all active file handlers.
-	b.df.Close()
+	if err := b.df.Close(); err != nil {
+		b.lo.Error("error closing active db file", "error", err, "id", b.df.ID())
+	}
+
+	// Close all stale datafiles as well.
+	for _, df := range b.stale {
+		if err := df.Close(); err != nil {
+			b.lo.Error("error closing active db file", "error", err, "id", df.ID())
+		}
+	}
 
 	// Cleanup the lock file.
 	if !b.opts.ReadOnly {
