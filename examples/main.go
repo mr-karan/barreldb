@@ -9,10 +9,10 @@ import (
 
 func main() {
 	barrel, err := barrel.Init(barrel.Opts{
-		Dir:         ".",
-		ReadOnly:    false,
-		EnableFSync: true,
-		MaxFileSize: 1 << 4,
+		Dir:               ".",
+		ReadOnly:          false,
+		EnableFSync:       true,
+		MaxActiveFileSize: 1 << 4,
 	})
 	if err != nil {
 		panic(err)
@@ -47,10 +47,5 @@ func main() {
 	}
 	fmt.Println(string(val))
 
-	err = barrel.Merge()
-	if err != nil {
-		panic(err)
-	}
-
-	barrel.Close()
+	barrel.Shutdown()
 }

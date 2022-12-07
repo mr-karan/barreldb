@@ -27,10 +27,10 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 - [x] Hints file
 - [x] GC cleanup of old/expired/deleted keys
 - [ ] Compaction routine
-- [ ] Rotate file if size increases
+- [x] Rotate file if size increases
 ### Starting program
 
-- [ ] Load data from hints file for faster boot time
+- [x] Load data from hints file for faster boot time
 
 ### Misc
 

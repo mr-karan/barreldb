@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/mr-karan/barreldb/pkg/barrel"
 	"github.com/tidwall/redcon"
@@ -21,14 +22,16 @@ type App struct {
 
 func main() {
 	barrel, err := barrel.Init(barrel.Opts{
-		Dir:         ".",
-		ReadOnly:    false,
-		EnableFSync: true,
-		MaxFileSize: 1 << 4,
-		Debug:       true,
+		Dir:                   ".",
+		ReadOnly:              false,
+		EnableFSync:           true,
+		MaxActiveFileSize:     1 << 4,
+		Debug:                 true,
+		CompactInterval:       time.Second * 20,
+		CheckFileSizeInterval: time.Minute * 1,
 	})
 	if err != nil {
-		lo.Fatal("error opening barrel db: %w", err)
+		lo.Fatal("error opening barrel db", "error", err)
 	}
 
 	app := &App{

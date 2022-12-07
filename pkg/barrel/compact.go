@@ -21,6 +21,27 @@ func (b *Barrel) ExamineFileSize(evalInterval time.Duration) {
 	}
 }
 
+// RunCompaction runs cleanup process to compact the keys and cleanup
+// dead/expired keys at a periodic interval. This helps to save disk space
+// and merge old inactive db files in a single file. It also generates a hints file
+// which helps in caching all the keys during a cold start.
+func (b *Barrel) RunCompaction(evalInterval time.Duration) {
+	var (
+		evalTicker = time.NewTicker(evalInterval).C
+	)
+	for range evalTicker {
+		if err := b.cleanupExpired(); err != nil {
+			b.lo.Error("error removing expired keys", "error", err)
+		}
+		// if err := b.merge(); err != nil {
+		// 	b.lo.Error("error merging old files", "error", err)
+		// }
+		if err := b.generateHints(); err != nil {
+			b.lo.Error("error generating hints file", "error", err)
+		}
+	}
+}
+
 // rotateDF checks if the active file size has crossed the threshold
 // of max allowed file size. If it has, it replaces the open file descriptors
 // pointing to that file with a new file and adds the current file to list of
@@ -35,8 +56,8 @@ func (b *Barrel) rotateDF() error {
 	}
 
 	// If the file is below the threshold of max size, do no action.
-	b.lo.Debug("checking if db file has exceeded max_size", "current_size", size, "max_size", b.opts.MaxFileSize)
-	if size < b.opts.MaxFileSize {
+	b.lo.Debug("checking if db file has exceeded max_size", "current_size", size, "max_size", b.opts.MaxActiveFileSize)
+	if size < b.opts.MaxActiveFileSize {
 		return nil
 	}
 
@@ -57,9 +78,9 @@ func (b *Barrel) rotateDF() error {
 	return nil
 }
 
-// GenerateHints encodes the contents of the in-memory hashtable
+// generateHints encodes the contents of the in-memory hashtable
 // as `gob` and writes the data to a hints file.
-func (b *Barrel) GenerateHints() error {
+func (b *Barrel) generateHints() error {
 	b.Lock()
 	defer b.Unlock()
 
@@ -71,8 +92,8 @@ func (b *Barrel) GenerateHints() error {
 	return nil
 }
 
-// CleanupExpired removes the expired keys.
-func (b *Barrel) CleanupExpired() error {
+// cleanupExpired removes the expired keys.
+func (b *Barrel) cleanupExpired() error {
 	b.Lock()
 	defer b.Unlock()
 

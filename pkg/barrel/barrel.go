@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -31,12 +32,17 @@ type Barrel struct {
 
 // Opts represents configuration options for managing a datastore.
 type Opts struct {
-	Debug         bool          // Enable debug logging.
-	Dir           string        // Path for storing data files.
-	ReadOnly      bool          // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
-	MergeInterval time.Duration // Interval to compact old files.
-	MaxFileSize   int64         // Max size of active file in bytes. On exceeding this size it's rotated.
-	EnableFSync   bool          // Should flush filesystem buffer after every right.
+	Debug bool   // Enable debug logging.
+	Dir   string // Path for storing data files.
+
+	ReadOnly    bool // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
+	EnableFSync bool // Should flush filesystem buffer after every right.
+
+	CompactInterval time.Duration // Interval to compact old files.
+
+	CheckFileSizeInterval time.Duration // Interval to check the file size of the active DB.
+	MaxActiveFileSize     int64         // Max size of active file in bytes. On exceeding this size it's rotated.
+
 }
 
 // initLogger initializes logger instance.
@@ -51,11 +57,38 @@ func initLogger(debug bool) logf.Logger {
 // Init initialises a datastore for storing data.
 func Init(opts Opts) (*Barrel, error) {
 
-	// TODO: Check for stale files and create an index automatically.
 	var (
-		lo    = initLogger(opts.Debug)
-		index = 0
+		lo     = initLogger(opts.Debug)
+		index  = 0
+		flockF *os.File
+		stale  = map[int]*datafile.DataFile{}
 	)
+
+	// Load existing datafiles
+	files, err := getDataFiles(opts.Dir)
+	if err != nil {
+		return nil, fmt.Errorf("error loading data files: %w", err)
+	}
+
+	if len(files) > 0 {
+		// Get the existing ids.
+		ids, err := getIDs(files)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing ids for existing files: %w", err)
+		}
+
+		// Increment the index to write to a new datafile.
+		index = ids[len(ids)-1] + 1
+
+		// Add all older datafiles to the list of stale files.
+		for _, idx := range ids {
+			df, err := datafile.New(opts.Dir, idx)
+			if err != nil {
+				return nil, err
+			}
+			stale[idx] = df
+		}
+	}
 
 	// Initialise a db store.
 	df, err := datafile.New(opts.Dir, index)
@@ -63,7 +96,6 @@ func Init(opts Opts) (*Barrel, error) {
 		return nil, err
 	}
 
-	var flockF *os.File
 	// If not running in a read only mode then create a lockfile to ensure only one process writes to the db directory.
 	if !opts.ReadOnly {
 		// Check if a lockfile already exists.
@@ -77,38 +109,57 @@ func Init(opts Opts) (*Barrel, error) {
 		}
 	}
 
+	// Initialise an empty keydir.
+	keydir := make(KeyDir, 0)
+
+	// Check if a hints file already exists and then use that to populate the hashtable.
+	hintsPath := filepath.Join(opts.Dir, HINTS_FILE)
+	if exists(hintsPath) {
+		if err := keydir.Decode(hintsPath); err != nil {
+			return nil, fmt.Errorf("error populating hashtable from hints file: %w", err)
+		}
+	}
+
 	// Initialise barrel.
 	barrel := &Barrel{
 		opts:   opts,
 		lo:     lo,
 		df:     df,
-		stale:  make(map[int]*datafile.DataFile, 0),
+		stale:  stale,
 		flockF: flockF,
-		keydir: make(KeyDir, 0),
+		keydir: keydir,
 		bufPool: sync.Pool{New: func() any {
 			return bytes.NewBuffer([]byte{})
 		}},
 	}
 
 	// Spawn a goroutine which runs in background and compacts all datafiles in a new single datafile.
-	// if opts.MergeInterval == time.Second*0 {
-	// 	// TODO: Add a sane default later.
-	// 	opts.MergeInterval = time.Second * 5
-	// }
-	// go barrel.MergeFiles(opts.MergeInterval)
+	if opts.CompactInterval == 0 {
+		opts.CompactInterval = time.Hour * 6
+	}
+	go barrel.RunCompaction(opts.CompactInterval)
+
 	// Spawn a goroutine which checks for the file size of the active file at periodic interval.
-	go barrel.ExamineFileSize(time.Minute * 1)
+	if barrel.opts.CheckFileSizeInterval == 0 {
+		barrel.opts.CheckFileSizeInterval = time.Minute * 1
+	}
+	go barrel.ExamineFileSize(barrel.opts.CheckFileSizeInterval)
 
 	return barrel, nil
 }
 
-// Close closes all the open file descriptors and removes any file locks.
+// Shutdown closes all the open file descriptors and removes any file locks.
 // If non running in a read-only mode, it's essential to call close so that it
 // removes any file locks on the database directory. Not calling close will prevent
 // future startups until it's removed manually.
-func (b *Barrel) Close() {
+func (b *Barrel) Shutdown() {
 	b.Lock()
 	defer b.Unlock()
+
+	// Generate a hints file.
+	if err := b.generateHints(); err != nil {
+		b.lo.Error("error generating hints file", "error", err)
+	}
 
 	// Close all active file handlers.
 	if err := b.df.Close(); err != nil {

@@ -44,6 +44,7 @@ func (k *KeyDir) Encode(fPath string) error {
 	return nil
 }
 
+// Decode decodes the gob data in the map.
 func (k *KeyDir) Decode(fPath string) error {
 	// Open the file for decoding gob data.
 	file, err := os.Open(fPath)
