@@ -12,14 +12,15 @@ import (
 )
 
 const (
-	LOCKFILE = "barrel.lock"
+	LOCKFILE   = "barrel.lock"
+	HINTS_FILE = "barrel.hints"
 )
 
 type Barrel struct {
 	sync.Mutex
 
 	lo      logf.Logger
-	bufPool *sync.Pool // Pool of byte buffers used for writing.
+	bufPool sync.Pool // Pool of byte buffers used for writing.
 	opts    Opts
 
 	keydir KeyDir                     // In-memory hashmap of all active keys.
@@ -84,11 +85,9 @@ func Init(opts Opts) (*Barrel, error) {
 		stale:  make(map[int]*datafile.DataFile, 0),
 		flockF: flockF,
 		keydir: make(KeyDir, 0),
-		bufPool: &sync.Pool{
-			New: func() interface{} {
-				return new(bytes.Buffer)
-			},
-		},
+		bufPool: sync.Pool{New: func() any {
+			return bytes.NewBuffer([]byte{})
+		}},
 	}
 
 	// Spawn a goroutine which runs in background and compacts all datafiles in a new single datafile.
@@ -131,7 +130,7 @@ func (b *Barrel) Put(k string, val []byte) error {
 		return fmt.Errorf("put operation now allowed in read-only mode")
 	}
 
-	b.lo.Debug("adding key", "key", k, "val", val)
+	b.lo.Debug("storing data", "key", k, "val", val)
 	return b.put(k, val, nil)
 }
 
@@ -147,7 +146,7 @@ func (b *Barrel) PutEx(k string, val []byte, ex time.Duration) error {
 		return fmt.Errorf("put operation now allowed in read-only mode")
 	}
 
-	b.lo.Debug("adding key with expiry", "key", k, "val", val, "expiry", ex.String())
+	b.lo.Debug("storing data with expiry", "key", k, "val", val, "expiry", ex.String())
 	return b.put(k, val, &expiry)
 }
 
@@ -158,8 +157,23 @@ func (b *Barrel) Get(k string) ([]byte, error) {
 	b.Lock()
 	defer b.Unlock()
 
-	b.lo.Debug("fetching key", "key", k)
-	return b.get(k)
+	b.lo.Debug("fetching data", "key", k)
+	record, err := b.get(k)
+	if err != nil {
+		return nil, err
+	}
+
+	// If expired, then don't return any result.
+	if record.isExpired() {
+		return nil, fmt.Errorf("invalid key: key has expired")
+	}
+
+	// If invalid checksum, return error.
+	if !record.isValidChecksum() {
+		return nil, fmt.Errorf("invalid data: checksum does not match")
+	}
+
+	return record.Value, nil
 }
 
 // Delete creates a tombstone record for the given key. The tombstone value is simply an empty byte array.

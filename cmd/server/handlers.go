@@ -40,7 +40,6 @@ func (app *App) set(conn redcon.Conn, cmd redcon.Command) {
 			conn.WriteError("ERR invalid duration" + string(cmd.Args[3]))
 			return
 		}
-		fmt.Println(expiry)
 		if err := app.barrel.PutEx(key, val, expiry); err != nil {
 			conn.WriteString(fmt.Sprintf("ERR: %s", err))
 			return

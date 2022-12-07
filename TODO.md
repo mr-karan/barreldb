@@ -44,5 +44,6 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 ### Starting program
 
 - [ ] Load data from hints file for faster boot time
+- [ ] Create specific mutex for different things
 
 ## Test Cases

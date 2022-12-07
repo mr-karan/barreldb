@@ -7,27 +7,11 @@ import (
 	"time"
 )
 
-// KeyDir represents an in-memory hash for faster lookups of the key.
-// Once the key is found in the map, the additional metadata like the offset record
-// and the file ID is used to extract the underlying record from the disk.
-// Advantage is that this approach only requires a single disk seek of the db file
-// since the position offset (in bytes) is already stored.
-type KeyDir map[string]Meta
-
-// Meta represents some additional properties for the given key.
-// The actual value of the key is not stored in the in-memory hashtable.
-type Meta struct {
-	Timestamp  int
-	RecordSize int
-	RecordPos  int
-	FileID     int
-}
-
-func (b *Barrel) get(k string) ([]byte, error) {
+func (b *Barrel) get(k string) (Record, error) {
 	// Check for entry in KeyDir.
 	meta, ok := b.keydir[k]
 	if !ok {
-		return nil, fmt.Errorf("error finding data for the given key")
+		return Record{}, fmt.Errorf("error finding data for the given key")
 	}
 
 	var (
@@ -36,32 +20,27 @@ func (b *Barrel) get(k string) ([]byte, error) {
 	)
 
 	// Read the file with the given offset.
-	record, err := b.df.Read(meta.RecordPos, meta.RecordSize)
+	data, err := b.df.Read(meta.RecordPos, meta.RecordSize)
 	if err != nil {
-		return nil, fmt.Errorf("error reading data from file: %v", err)
+		return Record{}, fmt.Errorf("error reading data from file: %v", err)
 	}
 
 	// Decode the header.
-	header.decode(record)
+	header.decode(data)
 
 	// Get the offset position in record to start reading the value from.
 	valPos := meta.RecordSize - int(header.ValSize)
 
 	// Read the value from the record.
-	val := record[valPos:]
+	val := data[valPos:]
 
-	// Check if the key has already expired or not.
-	// If expired, then don't return any result.
-	if time.Now().Unix() > int64(header.Expiry) {
-		return nil, fmt.Errorf("error finding data for the given key")
+	record := Record{
+		Header: header,
+		Key:    k,
+		Value:  val,
 	}
 
-	// Validate the checksum.
-	if crc32.ChecksumIEEE(val) != header.Checksum {
-		return nil, fmt.Errorf("invalid data: checksum does not match")
-	}
-
-	return val, nil
+	return record, nil
 }
 
 func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
@@ -76,6 +55,8 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 	// Check for expiry
 	if expiry != nil {
 		header.Expiry = uint32(expiry.Unix())
+	} else {
+		header.Expiry = 0
 	}
 
 	// Prepare the record.
@@ -84,9 +65,12 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 		Value: val,
 	}
 
-	// Get a buffer from the pool for writing.
+	// Create a buffer for writing data to it.
+	// buf := bytes.NewBuffer([]byte{})
+
 	buf := b.bufPool.Get().(*bytes.Buffer)
 	defer b.bufPool.Put(buf)
+	defer buf.Reset()
 
 	// Encode header.
 	header.encode(buf)

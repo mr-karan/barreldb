@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/mr-karan/barreldb/internal/datafile"
 )
@@ -14,16 +13,16 @@ import (
 // When compaction occurs, the Bitcask database will select two or more log files to merge,
 // and it will create a new log file that contains the combined data from the selected log files.
 // This new log file will be used in place of the old log files, and the old log files will be deleted to reclaim disk space.
-func (b *Barrel) MergeFiles(evalInterval time.Duration) {
-	var (
-		evalTicker = time.NewTicker(evalInterval).C
-	)
-	for range evalTicker {
-		if err := b.Merge(); err != nil {
-			b.lo.Error("error merging files", "error", err)
-		}
-	}
-}
+// func (b *Barrel) MergeFiles(evalInterval time.Duration) {
+// 	var (
+// 		evalTicker = time.NewTicker(evalInterval).C
+// 	)
+// 	for range evalTicker {
+// 		if err := b.Merge(); err != nil {
+// 			b.lo.Error("error merging files", "error", err)
+// 		}
+// 	}
+// }
 
 func (b *Barrel) Merge() error {
 	b.Lock()
@@ -59,11 +58,11 @@ func (b *Barrel) Merge() error {
 	// Since the keydir has updated values of all keys, all the old keys which are expired/deleted/overwritten
 	// will be cleaned up in the merged database.
 	for k := range b.keydir {
-		val, err := b.get(k)
+		record, err := b.get(k)
 		if err != nil {
 			return err
 		}
-		if err := tmpBarrel.put(k, val, nil); err != nil {
+		if err := tmpBarrel.put(k, record.Value, nil); err != nil {
 			return err
 		}
 	}
