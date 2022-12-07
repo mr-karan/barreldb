@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/tidwall/redcon"
 )
@@ -16,17 +17,39 @@ func (app *App) quit(conn redcon.Conn, cmd redcon.Command) {
 }
 
 func (app *App) set(conn redcon.Conn, cmd redcon.Command) {
-	if len(cmd.Args) != 3 {
+	var (
+		withExpiry bool
+	)
+	switch len(cmd.Args) {
+	case 4:
+		withExpiry = true
+	case 3:
+		withExpiry = false
+	default:
 		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
 		return
 	}
+
 	var (
 		key = string(cmd.Args[1])
 		val = cmd.Args[2]
 	)
-	if err := app.barrel.Put(key, val); err != nil {
-		conn.WriteString(fmt.Sprintf("ERR: %s", err))
-		return
+	if withExpiry {
+		expiry, err := time.ParseDuration(string(cmd.Args[3]))
+		if err != nil {
+			conn.WriteError("ERR invalid duration" + string(cmd.Args[3]))
+			return
+		}
+		fmt.Println(expiry)
+		if err := app.barrel.PutEx(key, val, expiry); err != nil {
+			conn.WriteString(fmt.Sprintf("ERR: %s", err))
+			return
+		}
+	} else {
+		if err := app.barrel.Put(key, val); err != nil {
+			conn.WriteString(fmt.Sprintf("ERR: %s", err))
+			return
+		}
 	}
 
 	conn.WriteString("OK")
@@ -64,32 +87,4 @@ func (app *App) delete(conn redcon.Conn, cmd redcon.Command) {
 	}
 
 	conn.WriteNull()
-}
-
-func (app *App) keys(conn redcon.Conn, cmd redcon.Command) {
-	if len(cmd.Args) != 2 {
-		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
-		return
-	}
-	var (
-		key = string(cmd.Args[1])
-	)
-
-	// Only supports listing all keys for now.
-	if key != "*" {
-		conn.WriteError("ERR: Only * is supported as a pattern for now'")
-		return
-	}
-
-	keys := app.barrel.List()
-
-	if len(keys) == 0 {
-		conn.WriteArray(0)
-		return
-	}
-
-	for _, k := range keys {
-		conn.WriteBulkString(k)
-	}
-
 }

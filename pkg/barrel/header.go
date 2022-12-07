@@ -7,14 +7,15 @@ import (
 
 /*
 Record is a binary representation of how each record is persisted in the disk.
-The first three fields have a fixed size of 4 bytes (so 4+4+4+4=16 bytes fixed width "Header").
-Key size = 4 bytes which means tha max size of key can be (2^32)-1 = ~4.29GB.
+The first five fields have a fixed size of 4 bytes (so 4*5=20 bytes fixed width "Header").
+Key size = 4 bytes which means the max size of key can be (2^32)-1 = ~4.29GB.
 Value size = 4 bytes which means tha max size of value can be (2^32)-1 = ~4.29GB.
-Each entry cannot exceed more than ~8.6GB as a theoretical limit.
 
+Each entry cannot exceed more than ~8.6GB as a theoretical limit.
 In a practical sense, this is also constrained by the memory of the underlying VM
 where this program would run.
 
+Representation of the record stored on disk.
 ------------------------------------------------------------------------------
 | crc(4) | time(4) | expiry (4) | key_size(4) | val_size(4) | key | val      |
 ------------------------------------------------------------------------------

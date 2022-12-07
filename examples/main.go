@@ -18,7 +18,7 @@ func main() {
 		panic(err)
 	}
 
-	if err := barrel.PutEx("hello", []byte("world"), time.Now().Add(time.Hour)); err != nil {
+	if err := barrel.PutEx("hello", []byte("world"), time.Second*5); err != nil {
 		panic(err)
 	}
 	if err := barrel.Put("good", []byte("bye")); err != nil {

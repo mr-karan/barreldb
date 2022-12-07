@@ -7,6 +7,22 @@ import (
 	"time"
 )
 
+// KeyDir represents an in-memory hash for faster lookups of the key.
+// Once the key is found in the map, the additional metadata like the offset record
+// and the file ID is used to extract the underlying record from the disk.
+// Advantage is that this approach only requires a single disk seek of the db file
+// since the position offset (in bytes) is already stored.
+type KeyDir map[string]Meta
+
+// Meta represents some additional properties for the given key.
+// The actual value of the key is not stored in the in-memory hashtable.
+type Meta struct {
+	Timestamp  int
+	RecordSize int
+	RecordPos  int
+	FileID     int
+}
+
 func (b *Barrel) get(k string) ([]byte, error) {
 	// Check for entry in KeyDir.
 	meta, ok := b.keydir[k]
@@ -33,6 +49,12 @@ func (b *Barrel) get(k string) ([]byte, error) {
 
 	// Read the value from the record.
 	val := record[valPos:]
+
+	// Check if the key has already expired or not.
+	// If expired, then don't return any result.
+	if time.Now().Unix() > int64(header.Expiry) {
+		return nil, fmt.Errorf("error finding data for the given key")
+	}
 
 	// Validate the checksum.
 	if crc32.ChecksumIEEE(val) != header.Checksum {
@@ -62,9 +84,9 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 		Value: val,
 	}
 
-	// Create a buffer for writing data to it.
-	// TODO: Create a buffer pool.
-	buf := bytes.NewBuffer([]byte{})
+	// Get a buffer from the pool for writing.
+	buf := b.bufPool.Get().(*bytes.Buffer)
+	defer b.bufPool.Put(buf)
 
 	// Encode header.
 	header.encode(buf)
