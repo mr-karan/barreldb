@@ -1,2 +1,5 @@
 [server]
 address = ":6379"
+
+[app]
+debug = true

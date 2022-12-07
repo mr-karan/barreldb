@@ -20,7 +20,7 @@ func (b *Barrel) MergeFiles(evalInterval time.Duration) {
 	)
 	for range evalTicker {
 		if err := b.Merge(); err != nil {
-			b.lo.Printf("error merging files: %s\n", err)
+			b.lo.Error("error merging files", "error", err)
 		}
 	}
 }
@@ -59,7 +59,6 @@ func (b *Barrel) Merge() error {
 	// Since the keydir has updated values of all keys, all the old keys which are expired/deleted/overwritten
 	// will be cleaned up in the merged database.
 	for k := range b.keydir {
-		fmt.Println("putting keys", k)
 		val, err := b.get(k)
 		if err != nil {
 			return err

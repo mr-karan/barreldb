@@ -25,6 +25,7 @@ func main() {
 		ReadOnly:    false,
 		EnableFSync: true,
 		MaxFileSize: 1 << 4,
+		Debug:       true,
 	})
 	if err != nil {
 		lo.Fatal("error opening barrel db: %w", err)
@@ -39,7 +40,8 @@ func main() {
 	mux.HandleFunc("quit", app.quit)
 	mux.HandleFunc("set", app.set)
 	mux.HandleFunc("get", app.get)
-	// mux.HandleFunc("del", app.delete)
+	mux.HandleFunc("del", app.delete)
+	mux.HandleFunc("keys", app.keys)
 
 	err = redcon.ListenAndServe(addr,
 		mux.ServeRESP,

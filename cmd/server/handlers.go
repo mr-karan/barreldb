@@ -48,3 +48,48 @@ func (app *App) get(conn redcon.Conn, cmd redcon.Command) {
 
 	conn.WriteBulk(val)
 }
+
+func (app *App) delete(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) != 2 {
+		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
+		return
+	}
+	var (
+		key = string(cmd.Args[1])
+	)
+	err := app.barrel.Delete(key)
+	if err != nil {
+		conn.WriteString(fmt.Sprintf("ERR: %s", err))
+		return
+	}
+
+	conn.WriteNull()
+}
+
+func (app *App) keys(conn redcon.Conn, cmd redcon.Command) {
+	if len(cmd.Args) != 2 {
+		conn.WriteError("ERR wrong number of arguments for '" + string(cmd.Args[0]) + "' command")
+		return
+	}
+	var (
+		key = string(cmd.Args[1])
+	)
+
+	// Only supports listing all keys for now.
+	if key != "*" {
+		conn.WriteError("ERR: Only * is supported as a pattern for now'")
+		return
+	}
+
+	keys := app.barrel.List()
+
+	if len(keys) == 0 {
+		conn.WriteArray(0)
+		return
+	}
+
+	for _, k := range keys {
+		conn.WriteBulkString(k)
+	}
+
+}

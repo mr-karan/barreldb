@@ -17,7 +17,7 @@ func (b *Barrel) ExamineFileSize(evalInterval time.Duration) {
 	)
 	for range evalTicker {
 		if err := b.rotateDF(); err != nil {
-			b.lo.Printf("error rotating db file: %s\n", err)
+			b.lo.Error("error rotating db file", "error", err)
 		}
 	}
 }

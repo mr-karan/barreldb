@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/tidwall/redcon v1.6.0
+	github.com/zerodha/logf v0.5.5
 	golang.org/x/sys v0.2.0
 )
 

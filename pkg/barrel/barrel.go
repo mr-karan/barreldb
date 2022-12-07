@@ -2,12 +2,12 @@ package barrel
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/mr-karan/barreldb/internal/datafile"
+	"github.com/zerodha/logf"
 )
 
 const (
@@ -17,7 +17,7 @@ const (
 type Barrel struct {
 	sync.Mutex
 
-	lo   *log.Logger
+	lo   logf.Logger
 	opts Opts // Options for managing datafile.
 
 	keydir KeyDir                     // In-memory hashmap of all active keys.
@@ -29,6 +29,7 @@ type Barrel struct {
 
 // Opts represents configuration options for managing a datastore.
 type Opts struct {
+	Debug         bool          // Enable debug logging.
 	Dir           string        // Path for storing data files.
 	ReadOnly      bool          // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
 	MergeInterval time.Duration // Interval to compact old files.
@@ -36,12 +37,21 @@ type Opts struct {
 	EnableFSync   bool          // Should flush filesystem buffer after every right.
 }
 
+// initLogger initializes logger instance.
+func initLogger(debug bool) logf.Logger {
+	opts := logf.Opts{EnableCaller: true}
+	if debug {
+		opts.Level = logf.DebugLevel
+	}
+	return logf.New(opts)
+}
+
 // Init initialises a datastore for storing data.
 func Init(opts Opts) (*Barrel, error) {
 
 	// TODO: Check for stale files and create an index automatically.
 	var (
-		lo    = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lshortfile)
+		lo    = initLogger(opts.Debug)
 		index = 0
 	)
 
@@ -76,10 +86,10 @@ func Init(opts Opts) (*Barrel, error) {
 	}
 
 	// Spawn a goroutine which runs in background and compacts all datafiles in a new single datafile.
-	if opts.MergeInterval == time.Second*0 {
-		// TODO: Add a sane default later.
-		opts.MergeInterval = time.Second * 5
-	}
+	// if opts.MergeInterval == time.Second*0 {
+	// 	// TODO: Add a sane default later.
+	// 	opts.MergeInterval = time.Second * 5
+	// }
 	// go barrel.MergeFiles(opts.MergeInterval)
 	// // Spawn a goroutine which checks for the file size of the active file at periodic interval.
 	// go barrel.ExamineFileSize(time.Minute * 1)
@@ -110,6 +120,8 @@ func (b *Barrel) Put(k string, val []byte) error {
 	if b.opts.ReadOnly {
 		return fmt.Errorf("put operation now allowed in read-only mode")
 	}
+
+	b.lo.Debug("adding key", "key", k, "val", val)
 
 	return b.put(k, val, nil)
 }
@@ -156,10 +168,17 @@ func (b *Barrel) List() []string {
 	b.Lock()
 	defer b.Unlock()
 
+	b.lo.Debug("fetching list of all keys")
+
 	keys := make([]string, len(b.keydir))
+
+	b.lo.Debug("reached 1")
+
 	for k := range b.keydir {
 		keys = append(keys, k)
 	}
+	b.lo.Debug("reached 2")
+
 	return keys
 }
 
