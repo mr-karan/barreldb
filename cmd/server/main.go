@@ -42,7 +42,7 @@ func main() {
 	mux.HandleFunc("get", app.get)
 	mux.HandleFunc("del", app.delete)
 
-	err = redcon.ListenAndServe(addr,
+	if err := redcon.ListenAndServe(addr,
 		mux.ServeRESP,
 		func(conn redcon.Conn) bool {
 			// use this function to accept or deny the connection.
@@ -51,9 +51,7 @@ func main() {
 		func(conn redcon.Conn, err error) {
 			// this is called when the connection has been closed
 		},
-	)
-	if err != nil {
+	); err != nil {
 		lo.Fatal("error starting server: %w", err)
 	}
-
 }

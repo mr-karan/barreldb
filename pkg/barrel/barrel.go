@@ -96,8 +96,8 @@ func Init(opts Opts) (*Barrel, error) {
 	// 	opts.MergeInterval = time.Second * 5
 	// }
 	// go barrel.MergeFiles(opts.MergeInterval)
-	// // Spawn a goroutine which checks for the file size of the active file at periodic interval.
-	// go barrel.ExamineFileSize(time.Minute * 1)
+	// Spawn a goroutine which checks for the file size of the active file at periodic interval.
+	go barrel.ExamineFileSize(time.Minute * 1)
 
 	return barrel, nil
 }

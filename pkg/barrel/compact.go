@@ -1,16 +1,15 @@
 package barrel
 
 import (
+	"path/filepath"
 	"time"
 
 	"github.com/mr-karan/barreldb/internal/datafile"
 )
 
-// ExamineFileSize runs cleanup operations at every configured interval.
+// ExamineFileSize checks for file size at a periodic interval.
 // It examines the file size of the active db file and marks it as stale
 // if the file size exceeds the configured size.
-// Additionally it runs a merge operation which compacts the stale files.
-// This produces a hints file as well which is used for faster startup time.
 func (b *Barrel) ExamineFileSize(evalInterval time.Duration) {
 	var (
 		evalTicker = time.NewTicker(evalInterval).C
@@ -36,6 +35,7 @@ func (b *Barrel) rotateDF() error {
 	}
 
 	// If the file is below the threshold of max size, do no action.
+	b.lo.Debug("checking if db file has exceeded max_size", "current_size", size, "max_size", b.opts.MaxFileSize)
 	if size < b.opts.MaxFileSize {
 		return nil
 	}
@@ -58,6 +58,45 @@ func (b *Barrel) rotateDF() error {
 
 	// Replace with a new instance of datafile.
 	b.df = df
+
+	return nil
+}
+
+// GenerateHints encodes the contents of the in-memory hashtable
+// as `gob` and writes the data to a hints file.
+func (b *Barrel) GenerateHints() error {
+	b.Lock()
+	defer b.Unlock()
+
+	path := filepath.Join(b.opts.Dir, HINTS_FILE)
+	if err := b.keydir.Encode(path); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CleanupExpired removes the expired keys.
+func (b *Barrel) CleanupExpired() error {
+	b.Lock()
+	defer b.Unlock()
+
+	// Iterate over all keys and delete all keys which are expired.
+	for k := range b.keydir {
+		record, err := b.get(k)
+		if err != nil {
+			b.lo.Error("error fetching key", "key", k, "error", err)
+			continue
+		}
+		if record.isExpired() {
+			b.lo.Debug("deleting key since it's expired", "key", k)
+			// Delete the key.
+			if err := b.delete(k); err != nil {
+				b.lo.Error("error deleting key", "key", k, "error", err)
+				continue
+			}
+		}
+	}
 
 	return nil
 }

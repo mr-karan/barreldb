@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"hash/crc32"
 	"time"
+
+	"github.com/mr-karan/barreldb/internal/datafile"
 )
 
 func (b *Barrel) get(k string) (Record, error) {
@@ -17,10 +19,24 @@ func (b *Barrel) get(k string) (Record, error) {
 	var (
 		// Header object for decoding the binary data into it.
 		header Header
+		reader *datafile.DataFile
 	)
 
+	// Set the current file ID as the default.
+	reader = b.df
+
+	// Check if the ID is different from the current ID.
+	if meta.FileID != b.df.ID() {
+		reader, ok = b.stale[meta.FileID]
+		if !ok {
+			return Record{}, fmt.Errorf("error looking up for the db file for the given id: %d", meta.FileID)
+		}
+		reader.Open()
+		defer reader.Close()
+	}
+
 	// Read the file with the given offset.
-	data, err := b.df.Read(meta.RecordPos, meta.RecordSize)
+	data, err := reader.Read(meta.RecordPos, meta.RecordSize)
 	if err != nil {
 		return Record{}, fmt.Errorf("error reading data from file: %v", err)
 	}
@@ -28,11 +44,12 @@ func (b *Barrel) get(k string) (Record, error) {
 	// Decode the header.
 	header.decode(data)
 
-	// Get the offset position in record to start reading the value from.
-	valPos := meta.RecordSize - int(header.ValSize)
-
-	// Read the value from the record.
-	val := data[valPos:]
+	var (
+		// Get the offset position in record to start reading the value from.
+		valPos = meta.RecordSize - int(header.ValSize)
+		// Read the value from the record.
+		val = data[valPos:]
+	)
 
 	record := Record{
 		Header: header,
@@ -52,7 +69,7 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 		ValSize:   uint32(len(val)),
 	}
 
-	// Check for expiry
+	// Check for expiry.
 	if expiry != nil {
 		header.Expiry = uint32(expiry.Unix())
 	} else {
@@ -65,11 +82,10 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 		Value: val,
 	}
 
-	// Create a buffer for writing data to it.
-	// buf := bytes.NewBuffer([]byte{})
-
+	// Get the buffer from the pool for writing data.
 	buf := b.bufPool.Get().(*bytes.Buffer)
 	defer b.bufPool.Put(buf)
+	// Resetting the buffer is important since the length of bytes written should be reset on each `set` operation.
 	defer buf.Reset()
 
 	// Encode header.

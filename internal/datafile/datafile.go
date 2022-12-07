@@ -84,7 +84,7 @@ func (d *DataFile) Read(pos int, size int) ([]byte, error) {
 	// Read the file with the given offset.
 	n, err := d.reader.ReadAt(record, start)
 	if err != nil {
-		return nil, fmt.Errorf("error reading data from file: %v", err)
+		return nil, err
 	}
 
 	// Check if the size of bytes read matches the record size.
@@ -115,6 +115,7 @@ func (d *DataFile) Close() error {
 	if err := d.writer.Close(); err != nil {
 		return err
 	}
+
 	if err := d.reader.Close(); err != nil {
 		return err
 	}

@@ -6,20 +6,6 @@ barrel.Open(dir="/data/barrel")
 
 Create a `barrel.db` file inside `/data/barrel` which is the working data directory.
 
-- timer.Timer -> check if file needs to be rotated (5MB)
-- rename current active file
-- create new file
-
-- timer.Timer -> merge all these files 30 minutes
-- loop over all inactive files
-- delete records not required
-
-
-.Put("hello") -> "world"
-
-.Put("hello) -> "bye"
-
-
 ### Writing
 
 - [x] Encode the header
@@ -38,12 +24,16 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 ### Background
 
 - [ ] Merge old files
-- [ ] Hints file
-- [ ] GC cleanup of old/expired/deleted keys
-
+- [x] Hints file
+- [x] GC cleanup of old/expired/deleted keys
+- [ ] Compaction routine
+- [ ] Rotate file if size increases
 ### Starting program
 
 - [ ] Load data from hints file for faster boot time
+
+### Misc
+
 - [ ] Create specific mutex for different things
 
 ## Test Cases
