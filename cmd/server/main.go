@@ -24,14 +24,15 @@ func main() {
 	barrel, err := barrel.Init(barrel.Opts{
 		Dir:                   ".",
 		ReadOnly:              false,
-		EnableFSync:           true,
+		AlwaysFSync:           true,
 		MaxActiveFileSize:     1 << 4,
-		Debug:                 true,
+		SyncInterval:          time.Second * 30,
+		Debug:                 false,
 		CompactInterval:       time.Second * 20,
 		CheckFileSizeInterval: time.Minute * 1,
 	})
 	if err != nil {
-		lo.Fatal("error opening barrel db", "error", err)
+		lo.Fatal("error opening barrel db: %w", err)
 	}
 
 	app := &App{

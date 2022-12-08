@@ -35,8 +35,10 @@ type Opts struct {
 	Debug bool   // Enable debug logging.
 	Dir   string // Path for storing data files.
 
-	ReadOnly    bool // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
-	EnableFSync bool // Should flush filesystem buffer after every right.
+	ReadOnly bool // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
+
+	AlwaysFSync  bool          // Should flush filesystem buffer after every right.
+	SyncInterval time.Duration // Interval to sync the active file on disk.
 
 	CompactInterval time.Duration // Interval to compact old files.
 
@@ -145,6 +147,14 @@ func Init(opts Opts) (*Barrel, error) {
 	}
 	go barrel.ExamineFileSize(barrel.opts.CheckFileSizeInterval)
 
+	// Spawn a goroutine which flushes the file to disk periodically.
+	if !barrel.opts.AlwaysFSync && barrel.opts.SyncInterval == 0 {
+		barrel.opts.SyncInterval = time.Minute * 1
+	}
+	if barrel.opts.SyncInterval > 0 {
+		go barrel.SyncFile(barrel.opts.SyncInterval)
+	}
+
 	return barrel, nil
 }
 
@@ -194,7 +204,7 @@ func (b *Barrel) Put(k string, val []byte) error {
 	}
 
 	b.lo.Debug("storing data", "key", k, "val", val)
-	return b.put(k, val, nil)
+	return b.put(b.df, k, val, nil)
 }
 
 // PutEx is same as Put but also takes an additional expiry time.
@@ -210,7 +220,7 @@ func (b *Barrel) PutEx(k string, val []byte, ex time.Duration) error {
 	}
 
 	b.lo.Debug("storing data with expiry", "key", k, "val", val, "expiry", ex.String())
-	return b.put(k, val, &expiry)
+	return b.put(b.df, k, val, &expiry)
 }
 
 // Get takes a key and finds the metadata in the in-memory hashtable (Keydir).
@@ -289,4 +299,26 @@ func (b *Barrel) Fold(fn func(k string) error) error {
 		}
 	}
 	return nil
+}
+
+// Sync calls fsync(2) on the active data file.
+func (b *Barrel) Sync() error {
+	b.Lock()
+	defer b.Unlock()
+
+	return b.df.Sync()
+}
+
+// SyncFile checks for file size at a periodic interval.
+// It examines the file size of the active db file and marks it as stale
+// if the file size exceeds the configured size.
+func (b *Barrel) SyncFile(evalInterval time.Duration) {
+	var (
+		evalTicker = time.NewTicker(evalInterval).C
+	)
+	for range evalTicker {
+		if err := b.Sync(); err != nil {
+			b.lo.Error("error syncing db file to disk", "error", err)
+		}
+	}
 }

@@ -11,7 +11,7 @@ func main() {
 	barrel, err := barrel.Init(barrel.Opts{
 		Dir:               ".",
 		ReadOnly:          false,
-		EnableFSync:       true,
+		AlwaysFSync:       true,
 		MaxActiveFileSize: 1 << 4,
 	})
 	if err != nil {

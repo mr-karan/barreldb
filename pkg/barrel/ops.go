@@ -58,7 +58,7 @@ func (b *Barrel) get(k string) (Record, error) {
 	return record, nil
 }
 
-func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
+func (b *Barrel) put(df *datafile.DataFile, k string, val []byte, expiry *time.Time) error {
 	// Prepare header.
 	header := Header{
 		Checksum:  crc32.ChecksumIEEE(val),
@@ -94,7 +94,7 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 	buf.Write(val)
 
 	// Append to underlying file.
-	offset, err := b.df.Write(buf.Bytes())
+	offset, err := df.Write(buf.Bytes())
 	if err != nil {
 		return fmt.Errorf("error writing data to file: %v", err)
 	}
@@ -106,12 +106,12 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 		Timestamp:  int(record.Header.Timestamp),
 		RecordSize: len(buf.Bytes()),
 		RecordPos:  offset + len(buf.Bytes()),
-		FileID:     b.df.ID(),
+		FileID:     df.ID(),
 	}
 
 	// Ensure filesystem's in memory buffer is flushed to disk.
-	if b.opts.EnableFSync {
-		if err := b.df.Sync(); err != nil {
+	if b.opts.AlwaysFSync {
+		if err := df.Sync(); err != nil {
 			return fmt.Errorf("error syncing file to disk: %v", err)
 		}
 	}
@@ -121,7 +121,7 @@ func (b *Barrel) put(k string, val []byte, expiry *time.Time) error {
 
 func (b *Barrel) delete(k string) error {
 	// Store an empty tombstone value for the given key.
-	if err := b.put(k, []byte{}, nil); err != nil {
+	if err := b.put(b.df, k, []byte{}, nil); err != nil {
 		return err
 	}
 

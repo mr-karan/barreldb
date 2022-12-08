@@ -17,6 +17,7 @@ func exists(path string) bool {
 	return true
 }
 
+// getDataFiles returns the list of db files in a given directory.
 func getDataFiles(dir string) ([]string, error) {
 	files, err := filepath.Glob(fmt.Sprintf("%s/*.db", dir))
 	if err != nil {
@@ -25,6 +26,7 @@ func getDataFiles(dir string) ([]string, error) {
 	return files, nil
 }
 
+// getIDs return the sorted list of IDs extracted from the list of filenames.
 func getIDs(files []string) ([]int, error) {
 	ids := make([]int, 0)
 
