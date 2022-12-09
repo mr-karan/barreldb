@@ -31,7 +31,7 @@ func getIDs(files []string) ([]int, error) {
 	ids := make([]int, 0)
 
 	for _, f := range files {
-		id, err := strconv.ParseInt((strings.TrimPrefix(strings.TrimSuffix(f, ".db"), "barrel_")), 10, 32)
+		id, err := strconv.ParseInt((strings.TrimPrefix(strings.TrimSuffix(filepath.Base(f), ".db"), "barrel_")), 10, 32)
 		if err != nil {
 			return nil, err
 		}
@@ -42,4 +42,20 @@ func getIDs(files []string) ([]int, error) {
 	sort.Ints(ids)
 
 	return ids, nil
+}
+
+func validateKV(k string, val []byte) error {
+	if len(k) == 0 {
+		return ErrEmptyKey
+	}
+
+	if len(k) > MaxKeySize {
+		return ErrLargeKey
+	}
+
+	if len(val) > MaxValueSize {
+		return ErrLargeValue
+	}
+
+	return nil
 }

@@ -92,23 +92,24 @@ func Init(opts Opts) (*Barrel, error) {
 		}
 	}
 
-	// Initialise a db store.
-	df, err := datafile.New(opts.Dir, index)
-	if err != nil {
-		return nil, err
-	}
-
 	// If not running in a read only mode then create a lockfile to ensure only one process writes to the db directory.
 	if !opts.ReadOnly {
 		// Check if a lockfile already exists.
-		if exists(LOCKFILE) {
-			return nil, fmt.Errorf("a lockfile already exists inside dir")
+		lockPath := filepath.Join(opts.Dir, LOCKFILE)
+		if exists(lockPath) {
+			return nil, ErrLocked
 		} else {
-			flockF, err = createFlockFile(LOCKFILE)
+			flockF, err = createFlockFile(lockPath)
 			if err != nil {
 				return nil, fmt.Errorf("error creating lockfile: %w", err)
 			}
 		}
+	}
+
+	// Initialise a db store.
+	df, err := datafile.New(opts.Dir, index)
+	if err != nil {
+		return nil, err
 	}
 
 	// Initialise an empty keydir.
@@ -200,7 +201,12 @@ func (b *Barrel) Put(k string, val []byte) error {
 	defer b.Unlock()
 
 	if b.opts.ReadOnly {
-		return fmt.Errorf("put operation now allowed in read-only mode")
+		return ErrReadOnly
+	}
+
+	// Validate key and value.
+	if err := validateKV(k, val); err != nil {
+		return err
 	}
 
 	b.lo.Debug("storing data", "key", k, "val", val)
@@ -212,12 +218,17 @@ func (b *Barrel) PutEx(k string, val []byte, ex time.Duration) error {
 	b.Lock()
 	defer b.Unlock()
 
+	if b.opts.ReadOnly {
+		return ErrReadOnly
+	}
+
+	// Validate key and value.
+	if err := validateKV(k, val); err != nil {
+		return err
+	}
+
 	// Add the expiry to the current time.
 	expiry := time.Now().Add(ex)
-
-	if b.opts.ReadOnly {
-		return fmt.Errorf("put operation now allowed in read-only mode")
-	}
 
 	b.lo.Debug("storing data with expiry", "key", k, "val", val, "expiry", ex.String())
 	return b.put(b.df, k, val, &expiry)
@@ -258,7 +269,7 @@ func (b *Barrel) Delete(k string) error {
 	defer b.Unlock()
 
 	if b.opts.ReadOnly {
-		return fmt.Errorf("delete operation now allowed in read-only mode")
+		return ErrReadOnly
 	}
 
 	b.lo.Debug("deleting key", "key", k)
@@ -307,18 +318,4 @@ func (b *Barrel) Sync() error {
 	defer b.Unlock()
 
 	return b.df.Sync()
-}
-
-// SyncFile checks for file size at a periodic interval.
-// It examines the file size of the active db file and marks it as stale
-// if the file size exceeds the configured size.
-func (b *Barrel) SyncFile(evalInterval time.Duration) {
-	var (
-		evalTicker = time.NewTicker(evalInterval).C
-	)
-	for range evalTicker {
-		if err := b.Sync(); err != nil {
-			b.lo.Error("error syncing db file to disk", "error", err)
-		}
-	}
 }

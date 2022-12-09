@@ -23,17 +23,13 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 
 ### Background
 
-- [ ] Merge old files
+- [x] Merge old files
 - [x] Hints file
 - [x] GC cleanup of old/expired/deleted keys
-- [ ] Compaction routine
+- [x] Compaction routine
 - [x] Rotate file if size increases
 ### Starting program
 
 - [x] Load data from hints file for faster boot time
-
-### Misc
-
-- [ ] Create specific mutex for different things
 
 ## Test Cases

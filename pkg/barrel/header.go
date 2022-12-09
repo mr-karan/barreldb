@@ -7,11 +7,19 @@ import (
 	"time"
 )
 
+const (
+	MaxKeySize   = 1<<32 - 1
+	MaxValueSize = 1<<32 - 1
+)
+
 /*
 Record is a binary representation of how each record is persisted in the disk.
-The first five fields have a fixed size of 4 bytes (so 4*5=20 bytes fixed width "Header").
-Key size = 4 bytes which means the max size of key can be (2^32)-1 = ~4.29GB.
-Value size = 4 bytes which means tha max size of value can be (2^32)-1 = ~4.29GB.
+Header represents how the record is stored and some metadata with it.
+For storing CRC checksum hash, timestamp and expiry of record, each field uses 4 bytes. (uint32 == 32 bits).
+The next field stores the max size of the key which is also represented with uint32. So the max size of the key
+can not be more than 2^32-1 which is ~ 4.3GB.
+The next field stores the max size of the value which is also represented with unint32. Max size of value can not be more
+than 2^32-1 which is ~ 4.3GB.
 
 Each entry cannot exceed more than ~8.6GB as a theoretical limit.
 In a practical sense, this is also constrained by the memory of the underlying VM

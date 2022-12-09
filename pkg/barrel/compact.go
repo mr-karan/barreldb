@@ -33,6 +33,8 @@ func (b *Barrel) RunCompaction(evalInterval time.Duration) {
 		evalTicker = time.NewTicker(evalInterval).C
 	)
 	for range evalTicker {
+		b.Lock()
+
 		if err := b.cleanupExpired(); err != nil {
 			b.lo.Error("error removing expired keys", "error", err)
 		}
@@ -41,6 +43,22 @@ func (b *Barrel) RunCompaction(evalInterval time.Duration) {
 		}
 		if err := b.generateHints(); err != nil {
 			b.lo.Error("error generating hints file", "error", err)
+		}
+
+		b.Unlock()
+	}
+}
+
+// SyncFile checks for file size at a periodic interval.
+// It examines the file size of the active db file and marks it as stale
+// if the file size exceeds the configured size.
+func (b *Barrel) SyncFile(evalInterval time.Duration) {
+	var (
+		evalTicker = time.NewTicker(evalInterval).C
+	)
+	for range evalTicker {
+		if err := b.Sync(); err != nil {
+			b.lo.Error("error syncing db file to disk", "error", err)
 		}
 	}
 }
@@ -84,9 +102,6 @@ func (b *Barrel) rotateDF() error {
 // generateHints encodes the contents of the in-memory hashtable
 // as `gob` and writes the data to a hints file.
 func (b *Barrel) generateHints() error {
-	b.Lock()
-	defer b.Unlock()
-
 	path := filepath.Join(b.opts.Dir, HINTS_FILE)
 	if err := b.keydir.Encode(path); err != nil {
 		return err
@@ -97,9 +112,6 @@ func (b *Barrel) generateHints() error {
 
 // cleanupExpired removes the expired keys.
 func (b *Barrel) cleanupExpired() error {
-	b.Lock()
-	defer b.Unlock()
-
 	// Iterate over all keys and delete all keys which are expired.
 	for k := range b.keydir {
 		record, err := b.get(k)
@@ -124,9 +136,6 @@ func (b *Barrel) cleanupExpired() error {
 // In this process, all the expired/deleted keys are cleaned up and old files
 // are removed from the disk.
 func (b *Barrel) merge() error {
-	b.Lock()
-	defer b.Unlock()
-
 	var (
 		mergefsync bool
 	)
