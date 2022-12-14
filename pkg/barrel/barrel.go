@@ -22,29 +22,12 @@ type Barrel struct {
 
 	lo      logf.Logger
 	bufPool sync.Pool // Pool of byte buffers used for writing.
-	opts    Opts
+	opts    *Options
 
 	keydir KeyDir                     // In-memory hashmap of all active keys.
 	df     *datafile.DataFile         // Active datafile.
 	stale  map[int]*datafile.DataFile // Map of older datafiles with their IDs.
 	flockF *os.File                   //Lockfile to prevent multiple write access to same datafile.
-}
-
-// Opts represents configuration options for managing a datastore.
-type Opts struct {
-	Debug bool   // Enable debug logging.
-	Dir   string // Path for storing data files.
-
-	ReadOnly bool // Whether this datastore should be opened in a read-only mode. Only one process at a time can open it in R-W mode.
-
-	AlwaysFSync  bool          // Should flush filesystem buffer after every right.
-	SyncInterval time.Duration // Interval to sync the active file on disk.
-
-	CompactInterval time.Duration // Interval to compact old files.
-
-	CheckFileSizeInterval time.Duration // Interval to check the file size of the active DB.
-	MaxActiveFileSize     int64         // Max size of active file in bytes. On exceeding this size it's rotated.
-
 }
 
 // initLogger initializes logger instance.
@@ -57,17 +40,24 @@ func initLogger(debug bool) logf.Logger {
 }
 
 // Init initialises a datastore for storing data.
-func Init(opts Opts) (*Barrel, error) {
+func Init(cfg ...Config) (*Barrel, error) {
+	// Set options.
+	opts := DefaultOptions()
+	for _, opt := range cfg {
+		if err := opt(opts); err != nil {
+			return nil, err
+		}
+	}
 
 	var (
-		lo     = initLogger(opts.Debug)
+		lo     = initLogger(opts.debug)
 		index  = 0
 		flockF *os.File
 		stale  = map[int]*datafile.DataFile{}
 	)
 
 	// Load existing datafiles
-	files, err := getDataFiles(opts.Dir)
+	files, err := getDataFiles(opts.dir)
 	if err != nil {
 		return nil, fmt.Errorf("error loading data files: %w", err)
 	}
@@ -84,7 +74,7 @@ func Init(opts Opts) (*Barrel, error) {
 
 		// Add all older datafiles to the list of stale files.
 		for _, idx := range ids {
-			df, err := datafile.New(opts.Dir, idx)
+			df, err := datafile.New(opts.dir, idx)
 			if err != nil {
 				return nil, err
 			}
@@ -93,9 +83,9 @@ func Init(opts Opts) (*Barrel, error) {
 	}
 
 	// If not running in a read only mode then create a lockfile to ensure only one process writes to the db directory.
-	if !opts.ReadOnly {
+	if !opts.readOnly {
 		// Check if a lockfile already exists.
-		lockPath := filepath.Join(opts.Dir, LOCKFILE)
+		lockPath := filepath.Join(opts.dir, LOCKFILE)
 		if exists(lockPath) {
 			return nil, ErrLocked
 		} else {
@@ -107,7 +97,7 @@ func Init(opts Opts) (*Barrel, error) {
 	}
 
 	// Initialise a db store.
-	df, err := datafile.New(opts.Dir, index)
+	df, err := datafile.New(opts.dir, index)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +106,7 @@ func Init(opts Opts) (*Barrel, error) {
 	keydir := make(KeyDir, 0)
 
 	// Check if a hints file already exists and then use that to populate the hashtable.
-	hintsPath := filepath.Join(opts.Dir, HINTS_FILE)
+	hintsPath := filepath.Join(opts.dir, HINTS_FILE)
 	if exists(hintsPath) {
 		if err := keydir.Decode(hintsPath); err != nil {
 			return nil, fmt.Errorf("error populating hashtable from hints file: %w", err)
@@ -137,23 +127,14 @@ func Init(opts Opts) (*Barrel, error) {
 	}
 
 	// Spawn a goroutine which runs in background and compacts all datafiles in a new single datafile.
-	if opts.CompactInterval == 0 {
-		opts.CompactInterval = time.Hour * 6
-	}
-	go barrel.RunCompaction(opts.CompactInterval)
+	go barrel.RunCompaction(opts.compactInterval)
 
 	// Spawn a goroutine which checks for the file size of the active file at periodic interval.
-	if barrel.opts.CheckFileSizeInterval == 0 {
-		barrel.opts.CheckFileSizeInterval = time.Minute * 1
-	}
-	go barrel.ExamineFileSize(barrel.opts.CheckFileSizeInterval)
+	go barrel.ExamineFileSize(barrel.opts.checkFileSizeInterval)
 
 	// Spawn a goroutine which flushes the file to disk periodically.
-	if !barrel.opts.AlwaysFSync && barrel.opts.SyncInterval == 0 {
-		barrel.opts.SyncInterval = time.Minute * 1
-	}
-	if barrel.opts.SyncInterval > 0 {
-		go barrel.SyncFile(barrel.opts.SyncInterval)
+	if barrel.opts.syncInterval != nil {
+		go barrel.SyncFile(*opts.syncInterval)
 	}
 
 	return barrel, nil
@@ -163,33 +144,39 @@ func Init(opts Opts) (*Barrel, error) {
 // If non running in a read-only mode, it's essential to call close so that it
 // removes any file locks on the database directory. Not calling close will prevent
 // future startups until it's removed manually.
-func (b *Barrel) Shutdown() {
+func (b *Barrel) Shutdown() error {
 	b.Lock()
 	defer b.Unlock()
 
 	// Generate a hints file.
 	if err := b.generateHints(); err != nil {
 		b.lo.Error("error generating hints file", "error", err)
+		return err
 	}
 
 	// Close all active file handlers.
 	if err := b.df.Close(); err != nil {
 		b.lo.Error("error closing active db file", "error", err, "id", b.df.ID())
+		return err
 	}
 
 	// Close all stale datafiles as well.
 	for _, df := range b.stale {
 		if err := df.Close(); err != nil {
 			b.lo.Error("error closing active db file", "error", err, "id", df.ID())
+			return err
 		}
 	}
 
 	// Cleanup the lock file.
-	if !b.opts.ReadOnly {
+	if !b.opts.readOnly {
 		if err := destroyFlockFile(b.flockF); err != nil {
 			b.lo.Error("error destroying lock file", "error", err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 // Put takes a key and value and encodes the data in bytes and writes to the db file.
@@ -200,7 +187,7 @@ func (b *Barrel) Put(k string, val []byte) error {
 	b.Lock()
 	defer b.Unlock()
 
-	if b.opts.ReadOnly {
+	if b.opts.readOnly {
 		return ErrReadOnly
 	}
 
@@ -218,7 +205,7 @@ func (b *Barrel) PutEx(k string, val []byte, ex time.Duration) error {
 	b.Lock()
 	defer b.Unlock()
 
-	if b.opts.ReadOnly {
+	if b.opts.readOnly {
 		return ErrReadOnly
 	}
 
@@ -249,12 +236,12 @@ func (b *Barrel) Get(k string) ([]byte, error) {
 
 	// If expired, then don't return any result.
 	if record.isExpired() {
-		return nil, fmt.Errorf("invalid key: key has expired")
+		return nil, ErrExpiredKey
 	}
 
 	// If invalid checksum, return error.
 	if !record.isValidChecksum() {
-		return nil, fmt.Errorf("invalid data: checksum does not match")
+		return nil, ErrChecksumMismatch
 	}
 
 	return record.Value, nil
@@ -268,7 +255,7 @@ func (b *Barrel) Delete(k string) error {
 	b.Lock()
 	defer b.Unlock()
 
-	if b.opts.ReadOnly {
+	if b.opts.readOnly {
 		return ErrReadOnly
 	}
 
@@ -281,7 +268,7 @@ func (b *Barrel) List() []string {
 	b.Lock()
 	defer b.Unlock()
 
-	keys := make([]string, len(b.keydir))
+	keys := make([]string, 0, len(b.keydir))
 
 	for k := range b.keydir {
 		keys = append(keys, k)

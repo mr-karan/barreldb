@@ -8,12 +8,7 @@ import (
 )
 
 func main() {
-	barrel, err := barrel.Init(barrel.Opts{
-		Dir:               ".",
-		ReadOnly:          false,
-		AlwaysFSync:       true,
-		MaxActiveFileSize: 1 << 4,
-	})
+	barrel, err := barrel.Init()
 	if err != nil {
 		panic(err)
 	}

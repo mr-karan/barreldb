@@ -13,7 +13,7 @@ func (b *Barrel) get(k string) (Record, error) {
 	// Check for entry in KeyDir.
 	meta, ok := b.keydir[k]
 	if !ok {
-		return Record{}, fmt.Errorf("error finding data for the given key")
+		return Record{}, ErrNoKey
 	}
 
 	var (
@@ -40,7 +40,9 @@ func (b *Barrel) get(k string) (Record, error) {
 	}
 
 	// Decode the header.
-	header.decode(data)
+	if err := header.decode(data); err != nil {
+		return Record{}, fmt.Errorf("error decoding header: %v", err)
+	}
 
 	var (
 		// Get the offset position in record to start reading the value from.
@@ -110,7 +112,7 @@ func (b *Barrel) put(df *datafile.DataFile, k string, val []byte, expiry *time.T
 	}
 
 	// Ensure filesystem's in memory buffer is flushed to disk.
-	if b.opts.AlwaysFSync {
+	if b.opts.alwaysFSync {
 		if err := df.Sync(); err != nil {
 			return fmt.Errorf("error syncing file to disk: %v", err)
 		}

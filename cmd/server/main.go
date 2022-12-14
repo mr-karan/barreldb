@@ -35,20 +35,20 @@ func main() {
 	}
 	app.lo.Info("booting barreldb server", "version", buildString)
 
-	barrel, err := barrel.Init(barrel.Opts{
-		Debug:                 ko.Bool("app.debug"),
-		Dir:                   ko.MustString("app.dir"),
-		ReadOnly:              ko.Bool("app.read_only"),
-		AlwaysFSync:           ko.Bool("app.always_fsync"),
-		SyncInterval:          ko.Duration("app.fsync_interval"),
-		MaxActiveFileSize:     ko.Int64("app.max_file_size"),
-		CompactInterval:       ko.Duration("app.compaction_interval"),
-		CheckFileSizeInterval: ko.Duration("app.eval_file_size_interval"),
-	})
+	// Set config options for barrel.
+	cfg := []barrel.Config{barrel.WithDir(ko.MustString("app.dir")), barrel.WithAutoSync()}
+	if ko.Bool("app.read_only") {
+		cfg = append(cfg, barrel.WithReadOnly())
+	}
+	if ko.Bool("app.debug") {
+		cfg = append(cfg, barrel.WithDebug())
+	}
+
+	// Initialise barrel.
+	barrel, err := barrel.Init(cfg...)
 	if err != nil {
 		app.lo.Fatal("error opening barrel db", "error", err)
 	}
-
 	app.barrel = barrel
 
 	// Initialise server.

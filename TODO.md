@@ -1,5 +1,7 @@
 ## TODO
 
+These are my rough notes about WIP implementations and backlog.
+
 ### Initialising
 
 barrel.Open(dir="/data/barrel")
@@ -14,7 +16,7 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 - [x] Add Checksum
 - [x] Organize methods as Encoder/Decoder package
 - [x] Add KeyDir struct
-  - [x] Get the file offset and add it to the hashmap
+- [x] Get the file offset and add it to the hashmap
 
 ### Reading
 
@@ -32,4 +34,20 @@ Create a `barrel.db` file inside `/data/barrel` which is the working data direct
 
 - [x] Load data from hints file for faster boot time
 
-## Test Cases
+### Raft
+
+Availability with N+1 node with raft
+
+- [ ] Explore hashicorp/raft
+
+### Test Cases
+
+- [x] Init
+- [x] Put
+- [x] Set
+- [x] Delete
+- [x] Close
+- [ ] Merge
+- [ ] Hints file
+- [ ] Rotate size
+

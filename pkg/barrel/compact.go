@@ -2,7 +2,6 @@ package barrel
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -77,8 +76,8 @@ func (b *Barrel) rotateDF() error {
 	}
 
 	// If the file is below the threshold of max size, do no action.
-	b.lo.Debug("checking if db file has exceeded max_size", "current_size", size, "max_size", b.opts.MaxActiveFileSize)
-	if size < b.opts.MaxActiveFileSize {
+	b.lo.Debug("checking if db file has exceeded max_size", "current_size", size, "max_size", b.opts.maxActiveFileSize)
+	if size < b.opts.maxActiveFileSize {
 		return nil
 	}
 
@@ -88,7 +87,7 @@ func (b *Barrel) rotateDF() error {
 	b.stale[oldID] = b.df
 
 	// Create a new datafile.
-	df, err := datafile.New(b.opts.Dir, oldID+1)
+	df, err := datafile.New(b.opts.dir, oldID+1)
 	if err != nil {
 		return err
 	}
@@ -102,7 +101,7 @@ func (b *Barrel) rotateDF() error {
 // generateHints encodes the contents of the in-memory hashtable
 // as `gob` and writes the data to a hints file.
 func (b *Barrel) generateHints() error {
-	path := filepath.Join(b.opts.Dir, HINTS_FILE)
+	path := filepath.Join(b.opts.dir, HINTS_FILE)
 	if err := b.keydir.Encode(path); err != nil {
 		return err
 	}
@@ -147,7 +146,7 @@ func (b *Barrel) merge() error {
 
 	// Create a new datafile for storing the output of merged files.
 	// Use a temp directory to store the file and move to main directory after merge is over.
-	tmpMergeDir, err := ioutil.TempDir("", "merged")
+	tmpMergeDir, err := os.MkdirTemp("", "merged")
 	if err != nil {
 		return err
 	}
@@ -159,9 +158,9 @@ func (b *Barrel) merge() error {
 	}
 
 	// Disable fsync for merge process and manually fsync at the end of merge.
-	if b.opts.AlwaysFSync {
+	if b.opts.alwaysFSync {
 		mergefsync = true
-		b.opts.AlwaysFSync = false
+		b.opts.alwaysFSync = false
 	}
 
 	// Loop over all active keys in the hashmap and write the updated values to merged database.
@@ -190,7 +189,7 @@ func (b *Barrel) merge() error {
 	b.stale = make(map[int]*datafile.DataFile, 0)
 
 	// Delete the existing .db files
-	err = filepath.Walk(b.opts.Dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(b.opts.dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -211,13 +210,13 @@ func (b *Barrel) merge() error {
 
 	// Move the merged file to the main directory.
 	os.Rename(filepath.Join(tmpMergeDir, fmt.Sprintf(datafile.ACTIVE_DATAFILE, 0)),
-		filepath.Join(b.opts.Dir, fmt.Sprintf(datafile.ACTIVE_DATAFILE, 0)))
+		filepath.Join(b.opts.dir, fmt.Sprintf(datafile.ACTIVE_DATAFILE, 0)))
 
 	// Set the merged DF as the active DF.
 	b.df = mergeDF
 
 	if mergefsync {
-		b.opts.AlwaysFSync = true
+		b.opts.alwaysFSync = true
 		b.df.Sync()
 	}
 

@@ -44,6 +44,7 @@ func getIDs(files []string) ([]int, error) {
 	return ids, nil
 }
 
+// validateKV validates key/value before inserting.
 func validateKV(k string, val []byte) error {
 	if len(k) == 0 {
 		return ErrEmptyKey
