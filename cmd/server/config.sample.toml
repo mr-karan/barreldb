@@ -3,10 +3,5 @@ address = ":6379"
 
 [app]
 debug = false # Enable debug logging
-dir = "/data/barreldb" # Directory to store .db files
+dir = "./data" # Directory to store .db files
 read_only = false # Whether to run barreldb in a read only mode. Write operations are not allowed in this mode.
-always_fsync = false # Whether to call `fsync(2)` on every write call. This significantly affects the performance but if data durability is a big concern, consider turning it on. 
-fsync_interval = "5s" # If always_fsync is turned off, barreldb can flush filesystem buffers periodically at this given interval.
-max_file_size = 1000000 # Maximum size of one datafile (.db file) in bytes. After this size has reached, it'll get rotated and a new .db file will be used for storing newer data.
-eval_file_size_interval = "1m" # Periodic interval to check if the size of the active .db file has reached `max_file_size`.
-compaction_interval = "6h" # Periodic interval to perform compaction for optimising disk usage. It cleans up deleted/expired keys and merges old datafiles into a single file.

@@ -1,46 +1,72 @@
 package main
 
 import (
-	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/mr-karan/barreldb/pkg/barrel"
 )
 
+var (
+	lo = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lshortfile)
+)
+
 func main() {
-	barrel, err := barrel.Init()
+	// Initialise.
+	barrel, err := barrel.Init(barrel.WithDir("data/"), barrel.WithAutoSync())
 	if err != nil {
-		panic(err)
+		lo.Fatalf("error initialising barrel: %v", err)
 	}
 
-	if err := barrel.PutEx("hello", []byte("world"), time.Second*5); err != nil {
-		panic(err)
-	}
-	if err := barrel.Put("good", []byte("bye")); err != nil {
-		panic(err)
+	var (
+		key = "hello"
+		val = []byte("world")
+	)
+
+	// Set a key.
+	if err := barrel.Put(key, val); err != nil {
+		lo.Fatalf("error setting a key: %v", err)
 	}
 
-	val, err := barrel.Get("hello")
+	// Fetch the key.
+	v, err := barrel.Get(key)
 	if err != nil {
-		panic(err)
+		lo.Fatalf("error fetching key %s: %v", key, err)
 	}
-	fmt.Println(string(val))
+	lo.Printf("fetched val: %s\n", string(v))
 
-	val, err = barrel.Get("good")
+	// Set a new key with an expiry.
+	key = "fruit"
+	val = []byte("apple")
+	ex := time.Second * 2
+	if err := barrel.PutEx(key, val, ex); err != nil {
+		lo.Fatalf("error setting a key with ex: %v", err)
+	}
+
+	// Wait for 3 seconds for expiry.
+	wait := time.Second * 3
+	lo.Printf("waiting for %s for the key to get expired", wait.String())
+	time.Sleep(wait)
+
+	// Try fetching the expired key.
+	_, err = barrel.Get(key)
 	if err != nil {
-		panic(err)
+		lo.Printf("error fetching key %s: %v\n", key, err)
 	}
 
-	fmt.Println(string(val))
+	// Delete the key.
+	if err := barrel.Delete(key); err != nil {
+		lo.Fatalf("error deleting key %s: %v", key, err)
+	}
 
+	// Fetch list of keys.
 	keys := barrel.List()
-	fmt.Println(keys)
-
-	val, err = barrel.Get("hello")
-	if err != nil {
-		panic(err)
+	for i, k := range keys {
+		lo.Printf("key %d is %s\n", i, k)
 	}
-	fmt.Println(string(val))
 
-	barrel.Shutdown()
+	if err := barrel.Shutdown(); err != nil {
+		lo.Fatalf("error closing barrel: %v", err)
+	}
 }

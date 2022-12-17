@@ -1,30 +1,30 @@
+APP-BIN := ./bin/barreldb.bin
+
 LAST_COMMIT := $(shell git rev-parse --short HEAD)
 LAST_COMMIT_DATE := $(shell git show -s --format=%ci ${LAST_COMMIT})
-VERSION := $(shell git describe --abbrev=1)
-BUILDSTR := ${VERSION} (build "\\\#"${LAST_COMMIT} $(shell date '+%Y-%m-%d %H:%M:%S'))
-
-BIN := ./bin/barreldb.bin
+VERSION := $(shell git describe --tags)
+BUILDSTR := ${VERSION} (Commit: ${LAST_COMMIT_DATE} (${LAST_COMMIT}), Build: $(shell date +"%Y-%m-%d% %H:%M:%S %z"))
 
 .PHONY: build
-build: $(BIN)
-
-$(BIN): $(shell find . -type f -name "*.go")
-	CGO_ENABLED=0 go build -o ${BIN} -ldflags="-s -w -X 'main.buildString=${BUILDSTR}'" ./cmd/server/*.go
+build: ## Build binary.
+	go build -o ${APP-BIN} -ldflags="-X 'main.buildString=${BUILDSTR}'" ./cmd/server/
 
 .PHONY: run
-run:
-	CGO_ENABLED=0 go run -ldflags="-s -w -X 'main.buildString=${BUILDSTR}'" ./cmd/server --config=cmd/server/config.toml
+run: ## Run binary.
+	./${APP-BIN} --config=./cmd/server/config.sample.toml
+
+.PHONY: clean
+clean: ## Remove temporary files and the `bin` folder.
+	rm -rf bin
+	rm -rf data/barrel_*
+
+.PHONY: fresh
+fresh: build run
 
 .PHONY: test
 test:
-	go test ./...
+	go test -v -failfast -race -coverpkg=./... -covermode=atomic -coverprofile=coverage.txt ./...
 
-# Use goreleaser to do a dry run producing local builds.
-.PHONY: release-dry
-release-dry:
-	goreleaser --parallelism 1 --rm-dist --snapshot --skip-validate --skip-publish
-
-# Use goreleaser to build production releases and publish them.
-.PHONY: release
-release:
-	goreleaser --parallelism 1 --rm-dist --skip-validate
+.PHONY: bench
+bench:
+	go test -bench=. -benchmem ./pkg/barrel/...

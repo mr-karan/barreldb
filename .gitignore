@@ -18,3 +18,6 @@ barrel*.lock
 barrel*.db
 barrel.hints
 config.toml
+bin/
+data/
+coverage.txt

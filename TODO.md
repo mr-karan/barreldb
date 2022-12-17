@@ -50,4 +50,3 @@ Availability with N+1 node with raft
 - [ ] Merge
 - [ ] Hints file
 - [ ] Rotate size
-

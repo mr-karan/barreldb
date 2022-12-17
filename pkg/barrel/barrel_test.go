@@ -1,7 +1,9 @@
 package barrel
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,6 +114,15 @@ func TestAPI(t *testing.T) {
 	t.Run("Len", func(t *testing.T) {
 		len := brl.Len()
 		assert.Equal(len, 1)
+	})
+
+	t.Run("Fold", func(t *testing.T) {
+		upper := func(s string) error {
+			fmt.Println(strings.ToUpper(s))
+			return nil
+		}
+		err = brl.Fold(upper)
+		assert.NoError(err)
 	})
 
 	t.Run("Expiry", func(t *testing.T) {
