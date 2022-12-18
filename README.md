@@ -6,6 +6,10 @@
 
 _A disk based key-value store based on [Bitcask](https://en.wikipedia.org/wiki/Bitcask)_.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/mr-karan/barreldb.svg)](https://pkg.go.dev/github.com/mr-karan/barreldb)
+[![Go Report Card](https://goreportcard.com/badge/mr-karan/barreldb)](https://goreportcard.com/report/mr-karan/barreldb)
+[![GitHub Actions](https://github.com/mr-karan/barreldb/actions/workflows/build.yml/badge.svg)](https://github.com/mr-karan/barreldb/actions/workflows/build.yml)
+
 ---
 
 BarrelDB is a Golang implementation of [Bitcask by Riak](https://riak.com/assets/bitcask-intro.pdf) paper and aims to closely follow the spec.
@@ -16,9 +20,9 @@ Bitcask is based on a log-structured hash table to store key-value data on disk.
 
 - Low Latency: Write queries are handled with a single O(1) disk seek. Keys lookup happen in memory using a hash table lookup. This makes it possible to achieve low latency even with a lot of keys/values in the database. Bitcask also relies on the filesystem read-ahead cache for a faster reads.
 - High Throughput: Since the file is opened in "append only" mode, it can handle large volumes of write operations with ease. 
-- Predictable performance. The DB has a consistent performance even with growing number of records. This can be seen in benchmarks as well.
-- Crash friendly. Bitcask commits each record to the disk and also generates a "hints" file which makes it easy to recover in case of a crash.
-- Elegant design. Bitcask achieves a lot just by keeping the architecture simple and relying on filesystem primitives for complex scenarios (backup/recovery, cache etc).
+- Predictable performance: The DB has a consistent performance even with growing number of records. This can be seen in benchmarks as well.
+- Crash friendly: Bitcask commits each record to the disk and also generates a "hints" file which makes it easy to recover in case of a crash.
+- Elegant design: Bitcask achieves a lot just by keeping the architecture simple and relying on filesystem primitives for handling complex scenarios (for eg: backup/recovery, cache etc).
 - Ability to handle datasets larger than RAM.
 
 ### Limitations
@@ -27,7 +31,7 @@ Bitcask is based on a log-structured hash table to store key-value data on disk.
 
 ## Internals
 
-You can refer to https://mrkaran.dev/ for a post which goes over the internals of Bitcask and also explains how BarrelDB works.
+You can refer to [Writing a disk-based key-value store in Golang](https://mrkaran.dev/posts/barreldb) blog post to read about the internals of Bitcask which also explains how BarrelDB works.
 
 ## Usage
 
