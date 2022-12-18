@@ -21,3 +21,4 @@ config.toml
 bin/
 data/
 coverage.txt
+dist/

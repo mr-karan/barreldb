@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/mr-karan/barreldb/pkg/barrel"
+	barrel "github.com/mr-karan/barreldb"
 )
 
 var (

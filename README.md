@@ -40,7 +40,7 @@ You can refer to [Writing a disk-based key-value store in Golang](https://mrkara
 
 ```go
 import (
-	"github.com/mr-karan/barreldb/pkg/barrel"
+	"github.com/mr-karan/barreldb"
 )
 
 barrel, _ := barrel.Init(barrel.WithDir("data/"))
@@ -82,17 +82,17 @@ ERR: invalid key: key is already expired
 Using `make bench`:
 
 ```
-go test -bench=. -benchmem ./pkg/barrel/...
+go test -bench=. -benchmem ./...
 HELLO
 goos: linux
 goarch: amd64
-pkg: github.com/mr-karan/barreldb/pkg/barrel
+pkg: github.com/mr-karan/barreldb
 cpu: 11th Gen Intel(R) Core(TM) i7-1165G7 @ 2.80GHz
 BenchmarkPut/DisableSync-8                385432              3712 ns/op        1103.48 MB/s          88 B/op          4 allocs/op
 BenchmarkPut/AlwaysSync-8                    222           5510563 ns/op           0.74 MB/s         115 B/op          4 allocs/op
 BenchmarkGet-8                            840627              1304 ns/op        3142.20 MB/s        4976 B/op          5 allocs/op
 PASS
-ok      github.com/mr-karan/barreldb/pkg/barrel 10.751s
+ok      github.com/mr-karan/barreldb 10.751s
 ```
 
 Using `redis-benchmark`:
