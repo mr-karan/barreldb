@@ -7,8 +7,8 @@
 _A disk based key-value store based on [Bitcask](https://en.wikipedia.org/wiki/Bitcask)_.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/mr-karan/barreldb.svg)](https://pkg.go.dev/github.com/mr-karan/barreldb)
-[![Go Report Card](https://goreportcard.com/badge/mr-karan/barreldb)](https://goreportcard.com/report/mr-karan/barreldb)
-[![GitHub Actions](https://github.com/mr-karan/barreldb/actions/workflows/build.yml/badge.svg)](https://github.com/mr-karan/barreldb/actions/workflows/build.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mr-karan/barreldb)](https://goreportcard.com/report/github.com/mr-karan/barreldb)
+[![GitHub Actions](https://github.com/mr-karan/barreldb/actions/workflows/release.yml/badge.svg)](https://github.com/mr-karan/barreldb/actions/workflows/release.yml)
 
 ---
 
@@ -76,6 +76,21 @@ OK
 127.0.0.1:6379> get goodbye
 ERR: invalid key: key is already expired
 ```
+
+## API
+
+| Method                                       | Description                                                                                              |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `Init(...cfg) *Barrel`                       | Returns a new instance of `Barrel`. Additional options can be passed like `WithDir`, `WithReadOnly` etc. |
+| `Put(string, []byte) error`                  | Store a key and value in the datastore.                                                                  |
+| `PutEx(string, []byte, time.Duration) error` | Store a key and value with expiry in the datastore.                                                      |
+| `Get(string) []byte,error`                   | Retrieve a value by key from the datastore.                                                              |
+| `Delete(string) error`                       | Delete a key from the datastore.                                                                         |
+| `Keys() []string`                            | List all keys in the datastore.                                                                          |
+| `Len() int`                                  | Return the total count of keys in the datastore.                                                         |
+| `Fold(func(string) error) error`             | Fold over all K/V pairs in a Bitcask datastore. Calls a function on each key inside the datastore.       |
+| `Sync() error`                               | Force any writes to sync to disk.                                                                        |
+| `Shutdown() error`                           | Close a data store and flush all pending writes. Removes any lock on the data directory as well.         |
 
 ## Benchmarks
 
