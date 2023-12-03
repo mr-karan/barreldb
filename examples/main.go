@@ -14,6 +14,11 @@ var (
 
 func main() {
 	// Initialise.
+	err := os.MkdirAll("data", os.ModePerm)
+	if err != nil {
+		lo.Fatalf("error creating data dir: %v", err)
+	} // Creating data dir.
+
 	barrel, err := barrel.Init(barrel.WithDir("data/"), barrel.WithAutoSync())
 	if err != nil {
 		lo.Fatalf("error initialising barrel: %v", err)
